@@ -9,7 +9,7 @@ import {
   Search,
 } from "lucide-react";
 import { SearchResult } from "./SearchResult";
-import { searchDrugs, fetchDiseases } from "../../../utils/api.jsx";
+import { searchDrugs, getDiseaseSuggestions } from "../../../utils/api.jsx";
 import { useSidebar } from "../../context/SidebarContext";
 
 export const SearchPage = () => {
@@ -20,11 +20,6 @@ export const SearchPage = () => {
   const [chats, setChats] = useState([]);
   const [currentChat, setCurrentChat] = useState(null);
   const { isSidebarOpen, setIsSidebarOpen } = useSidebar();
-  const [diseases, setDiseases] = useState([]);
-  const [diseasesLoading, setDiseasesLoading] = useState(false);
-  const [selectedDisease, setSelectedDisease] = useState(null);
-  const [showDiseaseDropdown, setShowDiseaseDropdown] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [filters, setFilters] = useState({
     minScore: 0,
@@ -39,24 +34,13 @@ export const SearchPage = () => {
       biological_process: true,
     },
   });
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedFromSuggestions, setSelectedFromSuggestions] = useState(false);
 
   // Fetch diseases from API on component mount
   useEffect(() => {
-    const getDiseases = async () => {
-      setDiseasesLoading(true);
-      try {
-        const diseasesData = await fetchDiseases();
-        setDiseases(diseasesData.diseases || []);
-      } catch (err) {
-        console.error("Failed to fetch diseases:", err);
-        setError("Failed to load diseases. Please refresh the page.");
-      } finally {
-        setDiseasesLoading(false);
-      }
-    };
-
-    getDiseases();
-
     const savedChats = JSON.parse(localStorage.getItem("drugChats") || "[]");
     setChats(savedChats);
   }, []);
@@ -67,6 +51,93 @@ export const SearchPage = () => {
       setResults(currentChat.results);
     }
   }, [currentChat]);
+
+  // Add debounced search
+  useEffect(() => {
+    // Reset selection state when query changes
+    if (selectedFromSuggestions) {
+      setSelectedFromSuggestions(false);
+    }
+
+    const debounceTimer = setTimeout(() => {
+      if (query.trim()) {
+        fetchSuggestions(query);
+      }
+    }, 300);
+
+    return () => clearTimeout(debounceTimer);
+  }, [query]);
+
+  // Add this to handle clicks outside the suggestions box
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showSuggestions && !event.target.closest(".suggestions-container")) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showSuggestions]);
+
+  const fetchSuggestions = async (searchTerm) => {
+    if (!searchTerm || searchTerm.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+
+    setSuggestionsLoading(true);
+    try {
+      const data = await getDiseaseSuggestions(searchTerm);
+      setSuggestions(data.suggestions || []);
+    } catch (error) {
+      console.error("Error fetching suggestions:", error);
+      setSuggestions([]);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  };
+
+  // Add a handler for selecting a suggestion
+  const handleSelectSuggestion = (suggestion) => {
+    setQuery(suggestion.name);
+    setShowSuggestions(false);
+    setSelectedFromSuggestions(true);
+
+    // Instead of trying to create an artificial event, directly call handleSubmit
+    // with the necessary data
+    setLoading(true);
+    setError(null);
+
+    // Call searchDrugs directly with the selected disease name
+    searchDrugs(suggestion.name, filters)
+      .then((result) => {
+        const formattedResults = Array.isArray(result) ? result : [result];
+        setResults(formattedResults);
+
+        // Create new chat
+        const newChat = {
+          query: suggestion.name,
+          results: formattedResults,
+          timestamp: new Date().toISOString(),
+        };
+
+        setCurrentChat(newChat);
+
+        // Update chat history
+        const updatedChats = [newChat, ...chats].slice(0, 10);
+        setChats(updatedChats);
+        localStorage.setItem("drugChats", JSON.stringify(updatedChats));
+      })
+      .catch((err) => {
+        setError(err.message || "Failed to fetch results. Please try again.");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  };
 
   const startNewChat = () => {
     // Save current chat if it exists
@@ -84,18 +155,7 @@ export const SearchPage = () => {
     setResults([]);
     setCurrentChat(null);
     setError(null);
-    setSelectedDisease(null);
   };
-
-  const handleDiseaseSelect = (disease) => {
-    setSelectedDisease(disease);
-    setQuery(disease);
-    setShowDiseaseDropdown(false);
-  };
-
-  const filteredDiseases = diseases.filter((disease) =>
-    disease.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -249,66 +309,80 @@ export const SearchPage = () => {
 
           {/* Search Form */}
           <div className="bg-white rounded-xl shadow-md p-6 mb-8">
-            <form onSubmit={handleSubmit}>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault(); // Prevent normal form submission
+                // Only the handleSelectSuggestion will trigger submission
+              }}
+            >
               <div className="relative mb-4">
-                <div className="relative">
+                <p className="text-base font-bold text-gray-700 mb-3">
+                  Type to search for a disease, then select from available
+                  options
+                </p>
+                <div className="relative suggestions-container">
                   <input
                     type="text"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    onClick={() => setShowDiseaseDropdown(true)}
-                    placeholder="Search for a disease or condition"
-                    className="w-full p-4 pl-12 pr-12 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+                    onFocus={() => setShowSuggestions(true)}
+                    placeholder="Type a disease name to see available options"
+                    className={`w-full p-4 pl-12 pr-12 rounded-lg border ${
+                      showSuggestions && query.trim().length > 0
+                        ? "border-blue-400 ring-2 ring-blue-200"
+                        : "border-gray-300"
+                    } focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm`}
                   />
                   <Search
                     className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400"
                     size={20}
                   />
-                  <button
-                    type="submit"
-                    className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:hover:bg-blue-600"
-                    disabled={loading || !query.trim()}
-                  >
-                    <Send size={16} />
-                  </button>
-                </div>
+                  {/* Submit button removed */}
 
-                {/* Disease Dropdown */}
-                {showDiseaseDropdown && (
-                  <div className="absolute z-20 mt-1 w-full bg-white rounded-lg shadow-lg border border-gray-200 max-h-80 overflow-y-auto">
-                    <div className="sticky top-0 bg-white p-2 border-b">
-                      <input
-                        type="text"
-                        placeholder="Filter diseases..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full p-2 border border-gray-300 rounded-md"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                    <div className="p-2">
-                      {diseasesLoading ? (
-                        <div className="text-center p-4">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto"></div>
+                  {/* Disease Suggestions Dropdown */}
+                  {showSuggestions && query.trim().length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-80 overflow-y-auto">
+                      {suggestionsLoading ? (
+                        <div className="p-4 text-center text-gray-500">
+                          Loading suggestions...
                         </div>
-                      ) : filteredDiseases.length > 0 ? (
-                        filteredDiseases.map((disease, index) => (
-                          <button
-                            key={index}
-                            onClick={() => handleDiseaseSelect(disease)}
-                            className="w-full text-left p-3 rounded hover:bg-gray-100 truncate"
-                          >
-                            {disease}
-                          </button>
-                        ))
+                      ) : suggestions.filter((s) => s.available).length > 0 ? (
+                        <ul>
+                          {suggestions
+                            .filter((suggestion) => suggestion.available)
+                            .map((suggestion, index) => (
+                              <li
+                                key={index}
+                                onClick={() =>
+                                  handleSelectSuggestion(suggestion)
+                                }
+                                className="p-3 cursor-pointer border-b last:border-0 hover:bg-gray-50 flex items-center"
+                              >
+                                <div
+                                  className="w-3 h-3 bg-green-500 rounded-full mr-2"
+                                  title="Available in Knowledge Graph"
+                                ></div>
+                                <div>
+                                  <p className="font-medium">
+                                    {suggestion.name}
+                                  </p>
+                                  {suggestion.description && (
+                                    <p className="text-sm text-gray-600 truncate">
+                                      {suggestion.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </li>
+                            ))}
+                        </ul>
                       ) : (
-                        <p className="text-gray-500 p-3">
-                          No matching diseases found
-                        </p>
+                        <div className="p-4 text-center text-gray-500">
+                          No matching diseases found in our database
+                        </div>
                       )}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
               {/* Advanced Filters Toggle */}
@@ -425,18 +499,42 @@ export const SearchPage = () => {
             )}
 
             {error && (
-              <div className="bg-red-50 text-red-700 p-4 rounded-lg mb-8 shadow">
-                <h3 className="font-bold">Error</h3>
-                <p>{error}</p>
+              <div className="bg-white rounded-xl shadow-md p-6 mb-8 border-l-4 border-red-500">
+                <h3 className="font-bold text-red-600 text-lg mb-2">Error</h3>
+                <p className="text-gray-700 mb-4">{error.message || error}</p>
+
+                {/* Display disease suggestions if available */}
+                {error.suggestions && error.suggestions.length > 0 && (
+                  <div className="mt-4">
+                    <p className="font-medium text-gray-700 mb-2">
+                      {error.userMessage ||
+                        "Try one of these diseases instead:"}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {error.suggestions.map((disease, i) => (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            setQuery(disease);
+                            setError(null);
+                          }}
+                          className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm hover:bg-blue-200 transition-colors"
+                        >
+                          {disease}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {!loading && results.length > 0 && (
+            {!loading && !error && results.length > 0 && (
               <div className="bg-white rounded-xl shadow-md p-6 mb-8">
                 <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                  {/* Analysis Results for {query} */}
                   Analysis Results
                 </h2>
+
                 <div className="space-y-4">
                   {results.map((result, index) => (
                     <SearchResult key={index} result={result} />
@@ -445,14 +543,16 @@ export const SearchPage = () => {
               </div>
             )}
 
-            {!loading && !error && results.length === 0 && query && (
+            {!loading && !error && results.length === 0 && (
               <div className="bg-white rounded-xl shadow-md p-8 text-center">
                 <Search size={48} className="text-gray-300 mx-auto mb-4" />
                 <h3 className="font-medium text-lg text-gray-700">
                   Ready to analyze
                 </h3>
                 <p className="text-gray-500 mt-2">
-                  Submit your query to find drug repurposing candidates
+                  {query
+                    ? "Type a disease name and select from the suggestions to view results"
+                    : "Start by typing a disease name in the search box above"}
                 </p>
               </div>
             )}
@@ -465,14 +565,6 @@ export const SearchPage = () => {
         <div
           className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
           onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
-
-      {/* Backdrop for diseases dropdown */}
-      {showDiseaseDropdown && (
-        <div
-          className="fixed inset-0 z-10"
-          onClick={() => setShowDiseaseDropdown(false)}
         />
       )}
     </div>

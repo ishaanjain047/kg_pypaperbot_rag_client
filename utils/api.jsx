@@ -19,7 +19,18 @@ export const searchDrugs = async (query, filters = {}) => {
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+      const errorData = await response.json();
+      // Check if the error includes suggestions
+      if (errorData.suggestions && Array.isArray(errorData.suggestions)) {
+        throw {
+          message: errorData.error || "Disease not found in knowledge graph",
+          suggestions: errorData.suggestions,
+          userMessage: errorData.message,
+        };
+      }
+      throw new Error(
+        errorData.error || `HTTP error! Status: ${response.status}`
+      );
     }
 
     const data = await response.json();
@@ -274,6 +285,40 @@ ${
   }
 };
 
+/**
+ * Get disease suggestions based on a search term
+ * @param {string} query - Search term
+ * @returns {Promise<Object>} - Response with disease suggestions
+ */
+export const getDiseaseSuggestions = async (query) => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/disease-suggestions?query=${encodeURIComponent(
+        query
+      )}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(
+        errorData.error || `HTTP error! Status: ${response.status}`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching disease suggestions:", error);
+    throw error;
+  }
+};
+
 export const checkHealth = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/health`);
@@ -317,20 +362,6 @@ export const getDrugRepurposing = async (disease) => {
     return await response.json();
   } catch (error) {
     console.error("Error getting repurposing results:", error);
-    throw error;
-  }
-};
-
-export const fetchDiseases = async () => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/diseases`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error("Error fetching diseases:", error);
     throw error;
   }
 };
