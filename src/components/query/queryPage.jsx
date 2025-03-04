@@ -34,6 +34,7 @@ import NewResearchModal from "./NewResearchModal";
 const ResearchAssistant = () => {
   // State
   const [query, setQuery] = useState("");
+  const [maxPapers, setMaxPapers] = useState(15); // Default to 15 papers
   const [sessionId, setSessionId] = useState(null);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState(null);
@@ -66,6 +67,7 @@ const ResearchAssistant = () => {
         setProgress(savedSession.progress || 0);
         setCurrentStage(savedSession.currentStage || "");
         setMessages(savedSession.messages || []);
+        setMaxPapers(savedSession.maxPapers || 15); // Load saved maxPapers
         console.log("Restored session:", savedSession);
       } catch (err) {
         console.error("Failed to parse saved session:", err);
@@ -174,6 +176,7 @@ const ResearchAssistant = () => {
           progress: eventData.progress || progress,
           currentStage: eventData.message || currentStage,
           messages,
+          maxPapers, // Save maxPapers with the session
         });
         break;
 
@@ -197,6 +200,7 @@ const ResearchAssistant = () => {
           progress: eventData.progress || progress,
           currentStage,
           messages: updatedMessages,
+          maxPapers, // Save maxPapers with the session
         });
         break;
 
@@ -220,6 +224,7 @@ const ResearchAssistant = () => {
           progress: eventData.progress || progress,
           currentStage,
           messages: newMessages,
+          maxPapers, // Save maxPapers with the session
         });
         break;
 
@@ -243,6 +248,7 @@ const ResearchAssistant = () => {
           progress,
           currentStage,
           messages,
+          maxPapers, // Save maxPapers with the session
         });
         break;
 
@@ -265,6 +271,7 @@ const ResearchAssistant = () => {
           progress: 100,
           currentStage,
           messages: completedMessages,
+          maxPapers, // Save maxPapers with the session
         });
         break;
 
@@ -293,6 +300,7 @@ const ResearchAssistant = () => {
     currentStage,
     messages,
     error,
+    maxPapers, // Add maxPapers to the dependency list
   ]);
 
   // Helper function to clean up session completely
@@ -309,6 +317,7 @@ const ResearchAssistant = () => {
     setSources([]);
     setConversations([]);
     setSessionValidated(false);
+    // Don't reset maxPapers to keep user preference
 
     // Remove from localStorage
     clearSessionFromLocalStorage();
@@ -423,7 +432,8 @@ const ResearchAssistant = () => {
     setCurrentStage("Initializing");
 
     try {
-      const data = await submitQuery(query);
+      // Pass maxPapers as part of the query
+      const data = await submitQuery(query, maxPapers);
 
       const newSessionId = data.session_id;
       setSessionId(newSessionId);
@@ -439,6 +449,7 @@ const ResearchAssistant = () => {
         progress: 0,
         currentStage: "Initializing",
         messages: [],
+        maxPapers, // Save maxPapers with the session
       });
     } catch (err) {
       console.error("Error submitting query:", err);
@@ -490,6 +501,7 @@ const ResearchAssistant = () => {
         progress,
         currentStage,
         messages,
+        maxPapers, // Save maxPapers with the session
       });
 
       // Clear loading state
@@ -524,6 +536,7 @@ const ResearchAssistant = () => {
         progress: 0,
         currentStage,
         messages: updatedMessages,
+        maxPapers, // Save maxPapers with the session
       });
     } catch (err) {
       setError("Failed to cancel: " + err.message);
@@ -560,6 +573,8 @@ const ResearchAssistant = () => {
           onSubmit={handleSubmitQuery}
           isProcessing={isProcessing}
           isServerAlive={isServerAlive}
+          maxPapers={maxPapers}
+          setMaxPapers={setMaxPapers}
         />
       )}
 
