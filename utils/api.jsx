@@ -338,17 +338,20 @@ export const fetchDiseases = async () => {
 /**
  * Submit a research query to the backend
  * @param {string} query - Research query
+ * @param {number} maxPapers - Maximum number of papers to download
  * @returns {Promise<Object>} - Response with session ID
  */
-export const submitQuery = async (query) => {
-  console.log(`Sending query to ${API_BASE_URL}/api/query`);
+export const submitQuery = async (query, maxPapers = 3) => {
+  console.log(
+    `Sending query to ${API_BASE_URL}/api/query with maxPapers=${maxPapers}`
+  );
 
   const response = await fetch(`${API_BASE_URL}/api/query`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, max_papers: maxPapers }),
     credentials: "include",
   });
 
