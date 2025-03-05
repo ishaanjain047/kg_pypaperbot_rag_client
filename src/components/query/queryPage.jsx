@@ -67,7 +67,7 @@ const ResearchAssistant = () => {
         setProgress(savedSession.progress || 0);
         setCurrentStage(savedSession.currentStage || "");
         setMessages(savedSession.messages || []);
-        setMaxPapers(savedSession.maxPapers || 15); // Load saved maxPapers
+        setMaxPapers(savedSession.maxPapers || 10); // Load saved maxPapers
         console.log("Restored session:", savedSession);
       } catch (err) {
         console.error("Failed to parse saved session:", err);

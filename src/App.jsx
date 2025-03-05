@@ -5,6 +5,7 @@ import { HomePage } from "./components/home/HomePage";
 import { SearchPage } from "./components/search/SearchPage";
 import { SidebarProvider } from "./context/SidebarContext";
 import ResearchAssistant from "./components/query/queryPage";
+import UltraSimplifiedResearchAssistant from "./components/query/s_queryPage";
 
 const App = () => {
   return (
@@ -14,7 +15,10 @@ const App = () => {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/search" element={<SearchPage />} />
-            <Route path="/query" element={<ResearchAssistant />} />
+            <Route
+              path="/query"
+              element={<UltraSimplifiedResearchAssistant />}
+            />
           </Routes>
         </Layout>
       </SidebarProvider>
