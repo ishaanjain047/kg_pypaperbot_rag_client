@@ -25,8 +25,22 @@ const QuestionForm = ({
     }
   }, []);
 
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (question.trim() && isServerAlive && !isLoading) {
+      console.log("Submitting question:", question);
+      onSubmit(e);
+    } else {
+      console.warn("Cannot submit question: ", {
+        hasQuestion: Boolean(question.trim()),
+        isServerAlive,
+        isLoading,
+      });
+    }
+  };
+
   return (
-    <form onSubmit={onSubmit} className="mb-6">
+    <form onSubmit={handleSubmit} className="mb-6">
       <div className="flex gap-2">
         <input
           ref={inputRef}
@@ -42,7 +56,7 @@ const QuestionForm = ({
           disabled={!question.trim() || !isServerAlive || isLoading}
           className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-400"
         >
-          Ask
+          {isLoading ? "Loading..." : "Ask"}
         </button>
       </div>
 
