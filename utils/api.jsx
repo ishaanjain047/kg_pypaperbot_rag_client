@@ -1,10 +1,14 @@
 const API_BASE_URL = import.meta.env.VITE_BASE_URL;
 
+// Add this to utils/api.jsx searchDrugs function to process TXGNN results
+
+// Modify the searchDrugs function to handle TXGNN scores
 export const searchDrugs = async (query, filters = {}) => {
   try {
     console.log("Searching for:", query);
     console.log("With filters:", filters);
 
+    // Add TXGNN-related parameters to the request
     const response = await fetch(`${API_BASE_URL}/api/repurpose`, {
       method: "POST",
       headers: {
@@ -15,6 +19,8 @@ export const searchDrugs = async (query, filters = {}) => {
         max_candidates: filters.maxCandidates || 500,
         min_score: filters.minScore || 0,
         analysis_types: filters.analysisTypes || undefined,
+        use_txgnn: filters.analysisTypes?.txgnn !== false, // Use TXGNN unless explicitly disabled
+        txgnn_weight: filters.txgnnWeight || 0.4, // Default TXGNN weight
       }),
     });
 
@@ -138,10 +144,26 @@ export const searchDrugs = async (query, filters = {}) => {
       // Format methods list for display
       const methodsFormatted = formatMethods(candidate.found_in_methods);
 
+      // Extract TXGNN score if available
+      const txgnnScore =
+        candidate.txgnn_score !== undefined
+          ? candidate.txgnn_score
+          : candidate.method_scores?.txgnn !== undefined
+          ? candidate.method_scores.txgnn
+          : null;
+
+      // Check if TXGNN was used
+      const usesTxgnn =
+        txgnnScore !== null ||
+        (candidate.evidence_types &&
+          candidate.evidence_types.includes("txgnn"));
+
       return {
         disease: data.disease || query,
         drug: candidate.drug || "Unknown Drug",
         score: score,
+        txgnn_score: txgnnScore,
+        uses_txgnn: usesTxgnn,
         rank: candidate.rank || 0,
         evidence_types: Array.isArray(candidate.evidence_types)
           ? candidate.evidence_types
@@ -208,7 +230,9 @@ export const searchDrugs = async (query, filters = {}) => {
               data.disease || query
             } with a confidence score of ${score.toFixed(1)} out of 100.
             
-This score represents the combined evidence from multiple computational analyses including gene associations, phenotype matching, and pathway analysis.`,
+This score represents the combined evidence from multiple computational analyses including gene associations, phenotype matching, pathway analysis${
+              usesTxgnn ? ", and TXGNN modeling" : ""
+            }.`,
 
           biological_evidence:
             candidate.biological_evidence ||
@@ -222,6 +246,8 @@ ${
     : ""
 }
 
+${usesTxgnn ? `TXGNN Score: ${(txgnnScore * 100).toFixed(1)}%\n` : ""}
+
 Analysis Method Scores:
 ${methodScoresFormatted}`,
 
@@ -234,9 +260,11 @@ ${methodScoresFormatted}`,
             } is supported by the following analysis methods:
 
 ${methodsFormatted}
+${usesTxgnn ? `• TXGNN Neural Network Analysis` : ""}
 
 The combined score reflects the following weights applied to each analysis method:
 ${weightsFormatted}
+${usesTxgnn && data.txgnn_weight ? `• TXGNN: ${data.txgnn_weight}` : ""}
 
 ${
   score >= 75
@@ -248,13 +276,17 @@ ${
 
           scientific_support:
             candidate.references ||
-            `This recommendation is based on knowledge graph analysis of biomedical literature and databases.
+            `This recommendation is based on knowledge graph analysis of biomedical literature and databases${
+              usesTxgnn ? " combined with AI model predictions" : ""
+            }.
 
 The repurposing prediction incorporates evidence from:
 • Gene associations between drug targets and disease genes
 • Phenotypic similarities between drug effects and disease manifestations
 • Biological pathway and molecular function overlaps
-• Disease hierarchy and related disease treatment patterns
+• Disease hierarchy and related disease treatment patterns${
+              usesTxgnn ? "\n• TXGNN neural network predictive modeling" : ""
+            }
 
 ${
   score >= 80

@@ -21,9 +21,11 @@ export const SearchPage = () => {
   const [currentChat, setCurrentChat] = useState(null);
   const { isSidebarOpen, setIsSidebarOpen } = useSidebar();
   const [filtersVisible, setFiltersVisible] = useState(false);
+
   const [filters, setFilters] = useState({
     minScore: 0,
     maxCandidates: 10,
+    txgnnWeight: 0.4, // Default TXGNN weight is 0.4
     analysisTypes: {
       gene: true,
       phenotype: true,
@@ -32,8 +34,10 @@ export const SearchPage = () => {
       phenotype_gene: true,
       molecular_function: true,
       biological_process: true,
+      txgnn: true, // New TXGNN analysis type
     },
   });
+
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
