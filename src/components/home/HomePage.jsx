@@ -1,6 +1,7 @@
 import React from "react";
 import { FeatureCard } from "./FeatureCard";
 import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
+import HelloTest from "./HelloTest"; // Import the new component
 
 export const HomePage = () => {
   const features = [
@@ -47,7 +48,8 @@ export const HomePage = () => {
       <h1 className="text-4xl font-bold text-gray-800 mb-6">
         Welcome to Renaiscent Bionexus
       </h1>
-
+      {/* Add the HelloTest component at the top */}
+      <HelloTest />
       <Card>
         <CardHeader>
           <CardTitle>Revolutionizing Drug Discovery Through AI</CardTitle>

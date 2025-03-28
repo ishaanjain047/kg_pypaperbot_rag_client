@@ -2,6 +2,26 @@ const API_BASE_URL = import.meta.env.VITE_BASE_URL;
 
 // Add this to utils/api.jsx searchDrugs function to process TXGNN results
 
+
+export const testHello = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/hello`, {
+      method: "GET",
+      credentials: "include",
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error("Hello test failed:", error);
+    throw error;
+  }
+};
+
+
 // Modify the searchDrugs function to handle TXGNN scores
 export const searchDrugs = async (query, filters = {}) => {
   try {
