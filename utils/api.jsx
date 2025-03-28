@@ -13,7 +13,9 @@ export const searchDrugs = async (query, filters = {}) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
       },
+      credentials: "include",
       body: JSON.stringify({
         disease: query,
         max_candidates: filters.maxCandidates || 500,
@@ -230,26 +232,27 @@ export const searchDrugs = async (query, filters = {}) => {
               data.disease || query
             } with a confidence score of ${score.toFixed(1)} out of 100.
             
-This score represents the combined evidence from multiple computational analyses including gene associations, phenotype matching, pathway analysis${
-              usesTxgnn ? ", and TXGNN modeling" : ""
-            }.`,
+  This score represents the combined evidence from multiple computational analyses including gene associations, phenotype matching, pathway analysis${
+    usesTxgnn ? ", and TXGNN modeling" : ""
+  }.`,
 
           biological_evidence:
             candidate.biological_evidence ||
             `This recommendation is based on evidence from ${evidenceTypesFormatted}.
 
-${
-  Array.isArray(candidate.evidence_types) && candidate.evidence_types.length > 0
-    ? `The drug shows promising biological connections to ${
-        data.disease || query
-      } through multiple mechanisms and pathways.`
-    : ""
-}
+  ${
+    Array.isArray(candidate.evidence_types) &&
+    candidate.evidence_types.length > 0
+      ? `The drug shows promising biological connections to ${
+          data.disease || query
+        } through multiple mechanisms and pathways.`
+      : ""
+  }
 
-${usesTxgnn ? `TXGNN Score: ${(txgnnScore * 100).toFixed(1)}%\n` : ""}
+  ${usesTxgnn ? `TXGNN Score: ${(txgnnScore * 100).toFixed(1)}%\n` : ""}
 
-Analysis Method Scores:
-${methodScoresFormatted}`,
+  Analysis Method Scores:
+  ${methodScoresFormatted}`,
 
           mechanism_analysis:
             candidate.mechanism ||
@@ -259,20 +262,20 @@ ${methodScoresFormatted}`,
               data.disease || query
             } is supported by the following analysis methods:
 
-${methodsFormatted}
-${usesTxgnn ? `• TXGNN Neural Network Analysis` : ""}
+  ${methodsFormatted}
+  ${usesTxgnn ? `• TXGNN Neural Network Analysis` : ""}
 
-The combined score reflects the following weights applied to each analysis method:
-${weightsFormatted}
-${usesTxgnn && data.txgnn_weight ? `• TXGNN: ${data.txgnn_weight}` : ""}
+  The combined score reflects the following weights applied to each analysis method:
+  ${weightsFormatted}
+  ${usesTxgnn && data.txgnn_weight ? `• TXGNN: ${data.txgnn_weight}` : ""}
 
-${
-  score >= 75
-    ? "This drug shows strong mechanistic support across multiple analysis methods."
-    : score >= 50
-    ? "This drug shows moderate mechanistic support in several analysis methods."
-    : "This drug shows some mechanistic potential that warrants further investigation."
-}`,
+  ${
+    score >= 75
+      ? "This drug shows strong mechanistic support across multiple analysis methods."
+      : score >= 50
+      ? "This drug shows moderate mechanistic support in several analysis methods."
+      : "This drug shows some mechanistic potential that warrants further investigation."
+  }`,
 
           scientific_support:
             candidate.references ||
@@ -323,6 +326,7 @@ export const getDiseaseSuggestions = async (query) => {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
+        credentials: "include",
       }
     );
 
@@ -342,7 +346,10 @@ export const getDiseaseSuggestions = async (query) => {
 
 export const checkHealth = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/health`);
+    const response = await fetch(`${API_BASE_URL}/health`, {
+      method: "GET",
+      credentials: "include",
+    });
     return response.ok;
   } catch (error) {
     return false;
@@ -357,6 +364,7 @@ export const searchDiseases = async () => {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
+      credentials: "include",
     });
     if (!response.ok) throw new Error("Failed to fetch diseases");
     return await response.json();
@@ -374,6 +382,7 @@ export const getDrugRepurposing = async (disease) => {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
+      credentials: "include",
       body: JSON.stringify({
         disease: disease,
         max_candidates: 500,
@@ -491,6 +500,7 @@ export const checkServerHealth = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/health`, {
       method: "GET",
+      credentials: "include",
       signal: AbortSignal.timeout(3000),
     });
 
