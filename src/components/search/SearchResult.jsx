@@ -12,9 +12,25 @@ import {
   Zap,
   Brain,
   FileText,
+  Check,
+  AlertCircle,
 } from "lucide-react";
 import ScoreBreakdown from "./ScoreCard";
-// Add this to the SearchResult.jsx component
+
+// Create a new Indication Badge component
+const IndicationBadge = ({ isIndication }) => {
+  return isIndication ? (
+    <div className="rounded-full px-3 py-1 font-medium text-sm flex items-center bg-green-100 text-green-800">
+      <Check size={14} className="mr-1" />
+      Current Indication
+    </div>
+  ) : (
+    <div className="rounded-full px-3 py-1 font-medium text-sm flex items-center bg-blue-100 text-blue-800">
+      <AlertCircle size={14} className="mr-1" />
+      Repurposing Candidate
+    </div>
+  );
+};
 
 // Create a new TXGNN Badge component
 const TXGNNBadge = ({ score }) => {
@@ -179,8 +195,7 @@ const ItemGrid = ({
           ? "disease"
           : ""}
         {items.length === 1 ? "" : "s"} specific to this drug
-      </p>{" "}
-      {/* Closed <p> tag properly here */}
+      </p>
       <div className="flex flex-wrap">
         {displayItems.map((item, index) => (
           <ChipComponent
@@ -351,6 +366,9 @@ export const SearchResult = ({ result }) => {
 
   // For top candidates
   if (isTopCandidate) {
+    // Check if it's an indication drug
+    const isIndication = result.is_indication === true;
+
     // Define color classes for different item types
     const colorClassSets = {
       genes: {
@@ -395,185 +413,210 @@ export const SearchResult = ({ result }) => {
     ].filter(Boolean).length;
 
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden transition-all hover:shadow-md">
-        <div className="p-5">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-medium text-sm">
-                Disease: {result.disease || "Unknown"}
-              </span>
-              <ArrowRight className="text-gray-400 hidden md:block" />
-              <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full font-medium text-sm">
-                Drug: {result.drug || "Unknown"}
-              </span>
+      <div
+        className={`bg-white rounded-lg shadow-sm border ${
+          isIndication ? "border-green-300" : "border-gray-200"
+        } overflow-hidden transition-all hover:shadow-md`}
+      >
+        <div className={`p-1 ${isIndication ? "bg-green-50" : ""}`}>
+          <div className="p-4">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-medium text-sm">
+                  Disease: {result.disease || "Unknown"}
+                </span>
+                <ArrowRight className="text-gray-400 hidden md:block" />
+                <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full font-medium text-sm">
+                  Drug: {result.drug || "Unknown"}
+                </span>
+              </div>
+
+              {typeof result.combined_score !== "undefined" ? (
+                <ScoreBadge score={result.combined_score} />
+              ) : typeof result.score !== "undefined" ? (
+                <ScoreBadge score={result.score} />
+              ) : null}
             </div>
 
-            {typeof result.score !== "undefined" && (
-              <ScoreBadge score={result.score} />
-            )}
-          </div>
+            {/* Display indication status */}
+            <div className="mb-4">
+              <IndicationBadge isIndication={isIndication} />
+            </div>
 
-          {/* Evidence types with optional TXGNN score badge */}
-          {result.evidence_types &&
-            Array.isArray(result.evidence_types) &&
-            result.evidence_types.length > 0 && (
-              <div className="mb-4">
-                <p className="text-sm text-gray-500 mb-2">Evidence types:</p>
-                <div className="flex flex-wrap gap-2">
-                  {result.evidence_types.map((type, idx) => (
-                    <EvidenceBadge key={idx} type={type} />
-                  ))}
+            {/* Evidence types with optional TXGNN score badge */}
+            {result.evidence_types &&
+              Array.isArray(result.evidence_types) &&
+              result.evidence_types.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-sm text-gray-500 mb-2">Evidence types:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {result.evidence_types.map((type, idx) => (
+                      <EvidenceBadge key={idx} type={type} />
+                    ))}
 
-                  {/* Add TXGNN Badge if score is available */}
-                  {result.txgnn_score !== undefined &&
-                    result.txgnn_score > 0 && (
-                      <TXGNNBadge score={result.txgnn_score} />
-                    )}
+                    {/* Add TXGNN Badge if score is available */}
+                    {result.txgnn_score !== undefined &&
+                      result.txgnn_score > 0 && (
+                        <TXGNNBadge score={result.txgnn_score} />
+                      )}
+                  </div>
                 </div>
+              )}
+
+            {result.summary && (
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                  Summary
+                </h3>
+                <p className="text-gray-700">{result.summary}</p>
               </div>
             )}
 
-          {result.summary && (
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                Summary
-              </h3>
-              <p className="text-gray-700">{result.summary}</p>
-            </div>
-          )}
+            {/* Related Data Button - Only show if there's related data */}
+            {relatedDataCount > 0 && (
+              <button
+                onClick={() => setShowRelatedData(!showRelatedData)}
+                className="flex items-center text-blue-600 hover:text-blue-800 font-medium text-sm mb-3"
+              >
+                <Database size={16} className="mr-2" />
+                {showRelatedData
+                  ? `Hide ${result.drug} Biological Data`
+                  : `Show ${result.drug}-Specific Biological Data (${relatedDataCount} categories)`}
+                {showRelatedData ? (
+                  <ChevronUp size={16} className="ml-1" />
+                ) : (
+                  <ChevronDown size={16} className="ml-1" />
+                )}
+              </button>
+            )}
 
-          {/* Related Data Button - Only show if there's related data */}
-          {relatedDataCount > 0 && (
+            {/* Related Data Panels */}
+            {showRelatedData && (
+              <div className="mb-6 space-y-4">
+                {result.related_genes?.length > 0 && (
+                  <ItemGrid
+                    items={result.related_genes}
+                    ChipComponent={GeneChip}
+                    title="Related Genes"
+                    icon={Dna}
+                    colorClasses={colorClassSets.genes}
+                    maxDisplay={15}
+                  />
+                )}
+
+                {result.related_phenotypes?.length > 0 && (
+                  <ItemGrid
+                    items={result.related_phenotypes}
+                    ChipComponent={PhenotypeChip}
+                    title="Related Phenotypes"
+                    icon={Activity}
+                    colorClasses={colorClassSets.phenotypes}
+                    maxDisplay={15}
+                  />
+                )}
+
+                {result.related_biological_processes?.length > 0 && (
+                  <ItemGrid
+                    items={result.related_biological_processes}
+                    ChipComponent={ProcessChip}
+                    title="Related Biological Processes"
+                    icon={Brain}
+                    colorClasses={colorClassSets.processes}
+                    maxDisplay={15}
+                  />
+                )}
+
+                {result.related_molecular_functions?.length > 0 && (
+                  <ItemGrid
+                    items={result.related_molecular_functions}
+                    ChipComponent={FunctionChip}
+                    title="Related Molecular Functions"
+                    icon={Zap}
+                    colorClasses={colorClassSets.functions}
+                    maxDisplay={15}
+                  />
+                )}
+
+                {result.related_diseases?.length > 0 && (
+                  <ItemGrid
+                    items={result.related_diseases}
+                    ChipComponent={DiseaseChip}
+                    title="Related Diseases"
+                    icon={FileText}
+                    colorClasses={colorClassSets.diseases}
+                    maxDisplay={15}
+                  />
+                )}
+              </div>
+            )}
+
             <button
-              onClick={() => setShowRelatedData(!showRelatedData)}
-              className="flex items-center text-blue-600 hover:text-blue-800 font-medium text-sm mb-3"
+              onClick={() => setExpanded(!expanded)}
+              className="flex items-center text-blue-600 hover:text-blue-800 font-medium text-sm mt-2"
             >
-              <Database size={16} className="mr-2" />
-              {showRelatedData
-                ? `Hide ${result.drug} Biological Data`
-                : `Show ${result.drug}-Specific Biological Data (${relatedDataCount} categories)`}
-              {showRelatedData ? (
-                <ChevronUp size={16} className="ml-1" />
+              {expanded ? (
+                <>
+                  Show less
+                  <ChevronUp size={16} className="ml-1" />
+                </>
               ) : (
-                <ChevronDown size={16} className="ml-1" />
+                <>
+                  View detailed analysis
+                  <ChevronDown size={16} className="ml-1" />
+                </>
               )}
             </button>
-          )}
 
-          {/* Related Data Panels */}
-          {showRelatedData && (
-            <div className="mb-6 space-y-4">
-              {result.related_genes?.length > 0 && (
-                <ItemGrid
-                  items={result.related_genes}
-                  ChipComponent={GeneChip}
-                  title="Related Genes"
+            {expanded && (
+              <div className="mt-6 space-y-4">
+                <ScoreBreakdown result={result} />
+                <AnalysisSection
+                  title={
+                    isIndication
+                      ? "Indication Information"
+                      : "Drug Repurposing Recommendation"
+                  }
+                  content={
+                    isIndication
+                      ? `${result.drug} is a current approved indication for ${
+                          result.disease
+                        }. The score of ${(
+                          result.combined_score ||
+                          result.score ||
+                          0
+                        ).toFixed(1)} reflects its established efficacy.`
+                      : result.analysis?.drug_repurposing_recommendation ||
+                        `${result.drug} is recommended as a potential repurposing candidate for ${result.disease}.`
+                  }
+                  icon={Star}
+                />
+                <AnalysisSection
+                  title="Biological Evidence"
+                  content={
+                    result.analysis?.biological_evidence ||
+                    "Evidence based on biological pathways and mechanisms."
+                  }
                   icon={Dna}
-                  colorClasses={colorClassSets.genes}
-                  maxDisplay={15}
                 />
-              )}
-
-              {result.related_phenotypes?.length > 0 && (
-                <ItemGrid
-                  items={result.related_phenotypes}
-                  ChipComponent={PhenotypeChip}
-                  title="Related Phenotypes"
+                <AnalysisSection
+                  title="Mechanism Analysis"
+                  content={
+                    result.analysis?.mechanism_analysis ||
+                    "The molecular mechanisms suggest therapeutic potential."
+                  }
                   icon={Activity}
-                  colorClasses={colorClassSets.phenotypes}
-                  maxDisplay={15}
                 />
-              )}
-
-              {result.related_biological_processes?.length > 0 && (
-                <ItemGrid
-                  items={result.related_biological_processes}
-                  ChipComponent={ProcessChip}
-                  title="Related Biological Processes"
-                  icon={Brain}
-                  colorClasses={colorClassSets.processes}
-                  maxDisplay={15}
+                <AnalysisSection
+                  title="Scientific Support"
+                  content={
+                    result.analysis?.scientific_support ||
+                    "Based on knowledge graph analysis of biomedical literature."
+                  }
+                  icon={ExternalLink}
                 />
-              )}
-
-              {result.related_molecular_functions?.length > 0 && (
-                <ItemGrid
-                  items={result.related_molecular_functions}
-                  ChipComponent={FunctionChip}
-                  title="Related Molecular Functions"
-                  icon={Zap}
-                  colorClasses={colorClassSets.functions}
-                  maxDisplay={15}
-                />
-              )}
-
-              {result.related_diseases?.length > 0 && (
-                <ItemGrid
-                  items={result.related_diseases}
-                  ChipComponent={DiseaseChip}
-                  title="Related Diseases"
-                  icon={FileText}
-                  colorClasses={colorClassSets.diseases}
-                  maxDisplay={15}
-                />
-              )}
-            </div>
-          )}
-
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="flex items-center text-blue-600 hover:text-blue-800 font-medium text-sm mt-2"
-          >
-            {expanded ? (
-              <>
-                Show less
-                <ChevronUp size={16} className="ml-1" />
-              </>
-            ) : (
-              <>
-                View detailed analysis
-                <ChevronDown size={16} className="ml-1" />
-              </>
+              </div>
             )}
-          </button>
-
-          {expanded && (
-            <div className="mt-6 space-y-4">
-              <ScoreBreakdown result={result} />
-              <AnalysisSection
-                title="Drug Repurposing Recommendation"
-                content={
-                  result.analysis?.drug_repurposing_recommendation ||
-                  `${result.drug} is recommended as a potential repurposing candidate for ${result.disease}.`
-                }
-                icon={Star}
-              />
-              <AnalysisSection
-                title="Biological Evidence"
-                content={
-                  result.analysis?.biological_evidence ||
-                  "Evidence based on biological pathways and mechanisms."
-                }
-                icon={Dna}
-              />
-              <AnalysisSection
-                title="Mechanism Analysis"
-                content={
-                  result.analysis?.mechanism_analysis ||
-                  "The molecular mechanisms suggest therapeutic potential."
-                }
-                icon={Activity}
-              />
-              <AnalysisSection
-                title="Scientific Support"
-                content={
-                  result.analysis?.scientific_support ||
-                  "Based on knowledge graph analysis of biomedical literature."
-                }
-                icon={ExternalLink}
-              />
-            </div>
-          )}
+          </div>
         </div>
       </div>
     );

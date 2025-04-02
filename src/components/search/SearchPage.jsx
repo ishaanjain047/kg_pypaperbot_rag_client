@@ -7,6 +7,8 @@ import {
   ChevronDown,
   ChevronUp,
   Search,
+  AlertCircle,
+  Check,
 } from "lucide-react";
 import { SearchResult } from "./SearchResult";
 import { searchDrugs, getDiseaseSuggestions } from "../../../utils/api.jsx";
@@ -15,6 +17,7 @@ import { useSidebar } from "../../context/SidebarContext";
 export const SearchPage = () => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
+  const [filteredResults, setFilteredResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [chats, setChats] = useState([]);
@@ -26,6 +29,8 @@ export const SearchPage = () => {
     minScore: 0,
     maxCandidates: 10,
     txgnnWeight: 0.4, // Default TXGNN weight is 0.4
+    showIndications: true, // New filter to show/hide indication drugs
+    showRepurposing: true, // New filter to show/hide repurposing candidates
     analysisTypes: {
       gene: true,
       phenotype: true,
@@ -53,6 +58,7 @@ export const SearchPage = () => {
     if (currentChat) {
       setQuery(currentChat.query);
       setResults(currentChat.results);
+      applyFilters(currentChat.results); // Apply filters to the restored results
     }
   }, [currentChat]);
 
@@ -71,6 +77,39 @@ export const SearchPage = () => {
 
     return () => clearTimeout(debounceTimer);
   }, [query]);
+
+  // Apply filters when results or filter settings change
+  useEffect(() => {
+    applyFilters(results);
+  }, [
+    results,
+    filters.showIndications,
+    filters.showRepurposing,
+    filters.minScore,
+  ]);
+
+  // Function to apply filters to results
+  const applyFilters = (resultsToFilter) => {
+    if (!resultsToFilter || !Array.isArray(resultsToFilter)) {
+      setFilteredResults([]);
+      return;
+    }
+
+    // Apply all filters
+    let filtered = resultsToFilter.filter((result) => {
+      // Filter by score
+      const score = result.combined_score || result.score || 0;
+      if (score < filters.minScore) return false;
+
+      // Filter by indication status
+      if (result.is_indication && !filters.showIndications) return false;
+      if (!result.is_indication && !filters.showRepurposing) return false;
+
+      return true;
+    });
+
+    setFilteredResults(filtered);
+  };
 
   // Add this to handle clicks outside the suggestions box
   useEffect(() => {
@@ -118,6 +157,7 @@ export const SearchPage = () => {
       .then((result) => {
         const formattedResults = Array.isArray(result) ? result : [result];
         setResults(formattedResults);
+        applyFilters(formattedResults);
 
         // Create new chat with all detailed scores included
         const newChat = {
@@ -164,6 +204,7 @@ export const SearchPage = () => {
     // Reset current state
     setQuery("");
     setResults([]);
+    setFilteredResults([]);
     setCurrentChat(null);
     setError(null);
   };
@@ -179,6 +220,7 @@ export const SearchPage = () => {
       const result = await searchDrugs(query, filters);
       const formattedResults = Array.isArray(result) ? result : [result];
       setResults(formattedResults);
+      applyFilters(formattedResults);
 
       // Create new chat
       const newChat = {
@@ -462,6 +504,60 @@ export const SearchPage = () => {
                       </div>
                     </div>
 
+                    {/* New drug type filters */}
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Drug Types
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="show-indications"
+                            checked={filters.showIndications}
+                            onChange={() =>
+                              handleFilterChange(
+                                "showIndications",
+                                !filters.showIndications
+                              )
+                            }
+                            className="h-4 w-4 text-blue-600 rounded"
+                          />
+                          <label
+                            htmlFor="show-indications"
+                            className="ml-2 text-sm text-gray-700 flex items-center"
+                          >
+                            <Check size={14} className="text-green-600 mr-1" />
+                            Current Indications
+                          </label>
+                        </div>
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="show-repurposing"
+                            checked={filters.showRepurposing}
+                            onChange={() =>
+                              handleFilterChange(
+                                "showRepurposing",
+                                !filters.showRepurposing
+                              )
+                            }
+                            className="h-4 w-4 text-blue-600 rounded"
+                          />
+                          <label
+                            htmlFor="show-repurposing"
+                            className="ml-2 text-sm text-gray-700 flex items-center"
+                          >
+                            <AlertCircle
+                              size={14}
+                              className="text-blue-600 mr-1"
+                            />
+                            Repurposing Candidates
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="mt-4">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Analysis Types
@@ -546,11 +642,52 @@ export const SearchPage = () => {
                   Analysis Results
                 </h2>
 
+                {/* Results summary with counts */}
+                <div className="flex gap-4 bg-gray-50 p-3 rounded-lg mb-4 text-sm">
+                  <div className="flex items-center">
+                    <span className="font-medium">Total: {results.length}</span>
+                  </div>
+                  <div className="flex items-center">
+                    <Check size={16} className="text-green-600 mr-1" />
+                    <span>
+                      {results.filter((r) => r.is_indication).length}{" "}
+                      Indications
+                    </span>
+                  </div>
+                  <div className="flex items-center">
+                    <AlertCircle size={16} className="text-blue-600 mr-1" />
+                    <span>
+                      {results.filter((r) => !r.is_indication).length}{" "}
+                      Repurposing
+                    </span>
+                  </div>
+                  <div className="flex items-center">
+                    <span className="text-gray-700">
+                      Showing: {filteredResults.length} results
+                    </span>
+                  </div>
+                </div>
+
                 <div className="space-y-4">
-                  {results.map((result, index) => (
+                  {filteredResults.map((result, index) => (
                     <SearchResult key={index} result={result} />
                   ))}
                 </div>
+
+                {filteredResults.length === 0 && (
+                  <div className="text-center py-8 bg-gray-50 rounded-lg">
+                    <AlertCircle
+                      size={32}
+                      className="text-gray-400 mx-auto mb-2"
+                    />
+                    <p className="text-gray-600">
+                      No results match your current filters.
+                    </p>
+                    <p className="text-gray-500 text-sm mt-2">
+                      Try adjusting your filter settings.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

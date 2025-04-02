@@ -21,12 +21,14 @@ export const testHello = async () => {
 };
 // Update the searchDrugs function in utils/api.jsx
 
+// Update the searchDrugs function in utils/api.jsx
+
 export const searchDrugs = async (query, filters = {}) => {
   try {
     console.log("Searching for:", query);
     console.log("With filters:", filters);
 
-    // Add TXGNN-related parameters to the request
+    // Add include_indications parameter to include indication drugs
     const response = await fetch(`${API_BASE_URL}/api/repurpose`, {
       method: "POST",
       headers: {
@@ -41,6 +43,7 @@ export const searchDrugs = async (query, filters = {}) => {
         analysis_types: filters.analysisTypes || undefined,
         use_txgnn: filters.analysisTypes?.txgnn !== false, // Use TXGNN unless explicitly disabled
         txgnn_weight: filters.txgnnWeight || 0.4, // Default TXGNN weight
+        include_indications: true  // Always include indication drugs
       }),
     });
 
@@ -84,60 +87,6 @@ export const searchDrugs = async (query, filters = {}) => {
         .join("\n");
     };
 
-    // Helper function to format weights for better readability
-    const formatWeights = (weights) => {
-      if (!weights || typeof weights !== "object") {
-        return "No weight data available";
-      }
-
-      return Object.entries(weights)
-        .map(([method, weight]) => {
-          const formattedMethod = method
-            .replace(/_/g, " ")
-            .split(" ")
-            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(" ");
-
-          return `• ${formattedMethod}: ${weight}`;
-        })
-        .join("\n");
-    };
-
-    // Helper function to format evidence types list
-    const formatEvidenceTypes = (types) => {
-      if (!Array.isArray(types) || types.length === 0) {
-        return "multiple analysis methods";
-      }
-
-      // Format each type to be more readable
-      return types
-        .map((type) => {
-          return type
-            .replace(/_/g, " ")
-            .split(" ")
-            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(" ");
-        })
-        .join(", ");
-    };
-
-    // Helper function to format methods list
-    const formatMethods = (methods) => {
-      if (!Array.isArray(methods) || methods.length === 0) {
-        return "No method information available";
-      }
-
-      return methods
-        .map((method) => {
-          return `• ${method
-            .replace(/_/g, " ")
-            .split(" ")
-            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(" ")}`;
-        })
-        .join("\n");
-    };
-
     // Safely map over the top candidates
     const formattedResults = data.top_candidates.map((candidate) => {
       // Ensure score is a number
@@ -148,21 +97,8 @@ export const searchDrugs = async (query, filters = {}) => {
           ? +candidate.score.toFixed(4)
           : 0;
 
-      // Format method scores for display
-      const methodScoresFormatted = formatMethodScores(candidate.method_scores);
-
-      // Format weights for display
-      const weightsFormatted = formatWeights(
-        candidate.weights_used || data.weights_used
-      );
-
-      // Format evidence types for display
-      const evidenceTypesFormatted = formatEvidenceTypes(
-        candidate.evidence_types
-      );
-
-      // Format methods list for display
-      const methodsFormatted = formatMethods(candidate.found_in_methods);
+      // Extract if this is an indication drug
+      const isIndication = candidate.is_indication === true;
 
       // Extract TXGNN score if available
       const txgnnScore =
@@ -175,12 +111,6 @@ export const searchDrugs = async (query, filters = {}) => {
       // Extract GPT score if available
       const gptScore =
         candidate.gpt_score !== undefined ? candidate.gpt_score : 0;
-
-      // Check if TXGNN was used
-      const usesTxgnn =
-        txgnnScore !== null ||
-        (candidate.evidence_types &&
-          candidate.evidence_types.includes("txgnn"));
 
       // Get all individual analyzer scores, ensuring each one exists
       // even if it's zero
@@ -221,13 +151,12 @@ export const searchDrugs = async (query, filters = {}) => {
         score: score,
         txgnn_score: txgnnScore,
         gpt_score: gptScore,
-        uses_txgnn: usesTxgnn,
-        rank: candidate.rank || 0,
+        is_indication: isIndication,  // Add indication flag
         evidence_types: Array.isArray(candidate.evidence_types)
           ? candidate.evidence_types
           : [],
         method_scores: candidate.method_scores || {},
-        analyzer_scores: analyzerScores, // NEW: All individual analyzer scores (0-100 scale)
+        analyzer_scores: analyzerScores,
         weights_used: candidate.weights_used || data.weights_used || {},
         ensemble_factor: candidate.ensemble_factor,
         consistency_factor: candidate.consistency_factor,
@@ -284,7 +213,7 @@ export const searchDrugs = async (query, filters = {}) => {
             : [],
         summary:
           candidate.summary ||
-          `${candidate.drug || "This drug"} is a repurposing candidate for ${
+          `${candidate.drug || "This drug"} is a ${isIndication ? "current indication" : "repurposing candidate"} for ${
             data.disease || query
           } with a confidence score of ${score.toFixed(1)}.`,
         analysis: {
@@ -292,79 +221,25 @@ export const searchDrugs = async (query, filters = {}) => {
             candidate.recommendation ||
             `${
               candidate.drug || "This drug"
-            } is recommended as a potential repurposing candidate for ${
+            } is ${isIndication ? "a current approved indication" : "recommended as a potential repurposing candidate"} for ${
               data.disease || query
             } with a confidence score of ${score.toFixed(1)} out of 100.
             
-  This score represents the combined evidence from multiple computational analyses including gene associations, phenotype matching, pathway analysis${
-    usesTxgnn ? ", and TXGNN modeling" : ""
-  }.`,
+  ${isIndication ? "This drug is already approved for this indication." : `This score represents the combined evidence from multiple computational analyses including gene associations, phenotype matching, pathway analysis${
+    txgnnScore > 0 ? ", and TXGNN modeling" : ""
+  }.`}`,
 
           biological_evidence:
             candidate.biological_evidence ||
-            `This recommendation is based on evidence from ${evidenceTypesFormatted}.
-
-  ${
-    Array.isArray(candidate.evidence_types) &&
-    candidate.evidence_types.length > 0
-      ? `The drug shows promising biological connections to ${
-          data.disease || query
-        } through multiple mechanisms and pathways.`
-      : ""
-  }
-
-  ${usesTxgnn ? `TXGNN Score: ${(txgnnScore * 100).toFixed(1)}%\n` : ""}
-  ${gptScore > 0 ? `GPT Analysis Score: ${(gptScore * 100).toFixed(1)}%\n` : ""}
-
-  Analysis Method Scores:
-  ${methodScoresFormatted}`,
+            `${isIndication ? "As an approved indication, this drug has established biological evidence for efficacy." : "This recommendation is based on evidence from multiple analyses."}`,
 
           mechanism_analysis:
             candidate.mechanism ||
-            `The repurposing potential of ${
-              candidate.drug || "this drug"
-            } for ${
-              data.disease || query
-            } is supported by the following analysis methods:
-
-  ${methodsFormatted}
-  ${usesTxgnn ? `• TXGNN Neural Network Analysis` : ""}
-  ${gptScore > 0 ? `• GPT Large Language Model Analysis` : ""}
-
-  The combined score reflects the following weights applied to each analysis method:
-  ${weightsFormatted}
-  ${usesTxgnn && data.txgnn_weight ? `• TXGNN: ${data.txgnn_weight}` : ""}
-  ${gptScore > 0 ? `• GPT: 0.2` : ""}
-
-  ${
-    score >= 75
-      ? "This drug shows strong mechanistic support across multiple analysis methods."
-      : score >= 50
-      ? "This drug shows moderate mechanistic support in several analysis methods."
-      : "This drug shows some mechanistic potential that warrants further investigation."
-  }`,
+            `${isIndication ? "As a current indication, the mechanism of action for this drug is already established." : "The repurposing potential needs to be validated through experimental studies."}`,
 
           scientific_support:
             candidate.references ||
-            `This recommendation is based on knowledge graph analysis of biomedical literature and databases${
-              usesTxgnn ? " combined with AI model predictions" : ""
-            }.
-
-The repurposing prediction incorporates evidence from:
-• Gene associations between drug targets and disease genes
-• Phenotypic similarities between drug effects and disease manifestations
-• Biological pathway and molecular function overlaps
-• Disease hierarchy and related disease treatment patterns${
-              usesTxgnn ? "\n• TXGNN neural network predictive modeling" : ""
-            }${gptScore > 0 ? "\n• GPT language model assessment" : ""}
-
-${
-  score >= 80
-    ? "Strong computational evidence suggests this drug may be effective, but experimental validation is recommended."
-    : score >= 60
-    ? "Moderate computational evidence supports this drug as a repurposing candidate. Further investigation is warranted."
-    : "Preliminary computational evidence suggests potential for repurposing. Consider as part of a broader investigation."
-}`,
+            `${isIndication ? "This drug is already approved and used clinically for this disease." : "This recommendation is based on computational analysis and would require further validation."}`,
         },
       };
     });
