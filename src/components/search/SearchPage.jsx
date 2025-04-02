@@ -104,14 +104,12 @@ export const SearchPage = () => {
     }
   };
 
-  // Add a handler for selecting a suggestion
   const handleSelectSuggestion = (suggestion) => {
     setQuery(suggestion.name);
     setShowSuggestions(false);
     setSelectedFromSuggestions(true);
 
-    // Instead of trying to create an artificial event, directly call handleSubmit
-    // with the necessary data
+    // Call searchDrugs directly with the selected disease name
     setLoading(true);
     setError(null);
 
@@ -121,11 +119,20 @@ export const SearchPage = () => {
         const formattedResults = Array.isArray(result) ? result : [result];
         setResults(formattedResults);
 
-        // Create new chat
+        // Create new chat with all detailed scores included
         const newChat = {
           query: suggestion.name,
           results: formattedResults,
           timestamp: new Date().toISOString(),
+          // Include the analyzer scores in the saved data
+          analyzerScores:
+            formattedResults.length > 0
+              ? formattedResults[0].analyzer_scores
+              : null,
+          methodScores:
+            formattedResults.length > 0
+              ? formattedResults[0].method_scores
+              : null,
         };
 
         setCurrentChat(newChat);

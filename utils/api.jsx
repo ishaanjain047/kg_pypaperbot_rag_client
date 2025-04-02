@@ -2,27 +2,25 @@ const API_BASE_URL = import.meta.env.VITE_BASE_URL;
 
 // Add this to utils/api.jsx searchDrugs function to process TXGNN results
 
-
 export const testHello = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/hello`, {
       method: "GET",
       credentials: "include",
     });
-    
+
     if (!response.ok) {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }
-    
+
     return await response.json();
   } catch (error) {
     console.error("Hello test failed:", error);
     throw error;
   }
 };
+// Update the searchDrugs function in utils/api.jsx
 
-
-// Modify the searchDrugs function to handle TXGNN scores
 export const searchDrugs = async (query, filters = {}) => {
   try {
     console.log("Searching for:", query);
@@ -172,7 +170,11 @@ export const searchDrugs = async (query, filters = {}) => {
           ? candidate.txgnn_score
           : candidate.method_scores?.txgnn !== undefined
           ? candidate.method_scores.txgnn
-          : null;
+          : 0;
+
+      // Extract GPT score if available
+      const gptScore =
+        candidate.gpt_score !== undefined ? candidate.gpt_score : 0;
 
       // Check if TXGNN was used
       const usesTxgnn =
@@ -180,16 +182,58 @@ export const searchDrugs = async (query, filters = {}) => {
         (candidate.evidence_types &&
           candidate.evidence_types.includes("txgnn"));
 
+      // Get all individual analyzer scores, ensuring each one exists
+      // even if it's zero
+      const analyzerScores = {};
+
+      // Make sure every common analyzer has a score (even if zero)
+      const commonAnalyzers = [
+        "gene",
+        "phenotype",
+        "disease_similarity",
+        "disease_hierarchy",
+        "phenotype_gene",
+        "molecular_function",
+        "biological_process",
+      ];
+
+      // Populate all common analyzers with 0 first
+      commonAnalyzers.forEach((analyzer) => {
+        analyzerScores[analyzer] = 0;
+      });
+
+      // Then update with actual values from method_scores
+      if (candidate.method_scores) {
+        Object.entries(candidate.method_scores).forEach(([analyzer, score]) => {
+          // Store original score as a number between 0-100
+          analyzerScores[analyzer] =
+            typeof score === "number" ? score * 100 : 0;
+        });
+      }
+
+      // Add TXGNN and GPT explicitly
+      analyzerScores.txgnn = txgnnScore * 100;
+      analyzerScores.gpt = gptScore * 100;
+
       return {
         disease: data.disease || query,
         drug: candidate.drug || "Unknown Drug",
         score: score,
         txgnn_score: txgnnScore,
+        gpt_score: gptScore,
         uses_txgnn: usesTxgnn,
         rank: candidate.rank || 0,
         evidence_types: Array.isArray(candidate.evidence_types)
           ? candidate.evidence_types
           : [],
+        method_scores: candidate.method_scores || {},
+        analyzer_scores: analyzerScores, // NEW: All individual analyzer scores (0-100 scale)
+        weights_used: candidate.weights_used || data.weights_used || {},
+        ensemble_factor: candidate.ensemble_factor,
+        consistency_factor: candidate.consistency_factor,
+        original_score: candidate.original_score,
+        metrics: candidate.metrics || {},
+        found_in_methods: candidate.found_in_methods || [],
 
         // Handle both array and dictionary formats for related data
         related_genes:
@@ -270,6 +314,7 @@ export const searchDrugs = async (query, filters = {}) => {
   }
 
   ${usesTxgnn ? `TXGNN Score: ${(txgnnScore * 100).toFixed(1)}%\n` : ""}
+  ${gptScore > 0 ? `GPT Analysis Score: ${(gptScore * 100).toFixed(1)}%\n` : ""}
 
   Analysis Method Scores:
   ${methodScoresFormatted}`,
@@ -284,10 +329,12 @@ export const searchDrugs = async (query, filters = {}) => {
 
   ${methodsFormatted}
   ${usesTxgnn ? `• TXGNN Neural Network Analysis` : ""}
+  ${gptScore > 0 ? `• GPT Large Language Model Analysis` : ""}
 
   The combined score reflects the following weights applied to each analysis method:
   ${weightsFormatted}
   ${usesTxgnn && data.txgnn_weight ? `• TXGNN: ${data.txgnn_weight}` : ""}
+  ${gptScore > 0 ? `• GPT: 0.2` : ""}
 
   ${
     score >= 75
@@ -309,7 +356,7 @@ The repurposing prediction incorporates evidence from:
 • Biological pathway and molecular function overlaps
 • Disease hierarchy and related disease treatment patterns${
               usesTxgnn ? "\n• TXGNN neural network predictive modeling" : ""
-            }
+            }${gptScore > 0 ? "\n• GPT language model assessment" : ""}
 
 ${
   score >= 80

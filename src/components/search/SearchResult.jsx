@@ -13,7 +13,7 @@ import {
   Brain,
   FileText,
 } from "lucide-react";
-
+import ScoreBreakdown from "./ScoreCard";
 // Add this to the SearchResult.jsx component
 
 // Create a new TXGNN Badge component
@@ -329,6 +329,11 @@ export const SearchResult = ({ result }) => {
   const [expanded, setExpanded] = useState(false);
   const [showRelatedData, setShowRelatedData] = useState(false);
 
+  // Add near the beginning of your SearchResult component
+  console.log("Full result object:", result);
+  console.log("TXGNN score:", result.txgnn_score);
+  console.log("Method scores:", result.method_scores);
+
   // Return fallback UI if result is null or not an object
   if (!result || typeof result !== "object") {
     return (
@@ -534,6 +539,7 @@ export const SearchResult = ({ result }) => {
 
           {expanded && (
             <div className="mt-6 space-y-4">
+              <ScoreBreakdown result={result} />
               <AnalysisSection
                 title="Drug Repurposing Recommendation"
                 content={
