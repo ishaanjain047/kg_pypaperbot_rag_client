@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Send,
   PlusCircle,
@@ -9,10 +9,17 @@ import {
   Search,
   AlertCircle,
   Check,
+  Sparkles,
+  FileText,
 } from "lucide-react";
 import { SearchResult } from "./SearchResult";
-import { searchDrugs, getDiseaseSuggestions } from "../../../utils/api.jsx";
+import {
+  searchDrugs,
+  getDiseaseSuggestions,
+  getKnowledgeBase,
+} from "../../../utils/api.jsx";
 import { useSidebar } from "../../context/SidebarContext";
+import KnowledgeBaseDisplay from "./KnowledgeBaseDisplay";
 
 export const SearchPage = () => {
   const [query, setQuery] = useState("");
@@ -24,6 +31,15 @@ export const SearchPage = () => {
   const [currentChat, setCurrentChat] = useState(null);
   const { isSidebarOpen, setIsSidebarOpen } = useSidebar();
   const [filtersVisible, setFiltersVisible] = useState(false);
+  const [knowledgeBase, setKnowledgeBase] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedFromSuggestions, setSelectedFromSuggestions] = useState(false);
+  const inputRef = useRef(null);
+  const suggestionsRef = useRef(null);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [showFilters, setShowFilters] = useState(false);
 
   const [filters, setFilters] = useState({
     minScore: 0,
@@ -31,6 +47,7 @@ export const SearchPage = () => {
     txgnnWeight: 0.4, // Default TXGNN weight is 0.4
     showIndications: true, // New filter to show/hide indication drugs
     showRepurposing: true, // New filter to show/hide repurposing candidates
+    applyQualitative: true, // New filter to enable/disable qualitative analysis
     analysisTypes: {
       gene: true,
       phenotype: true,
@@ -43,11 +60,6 @@ export const SearchPage = () => {
     },
   });
 
-  const [suggestions, setSuggestions] = useState([]);
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [selectedFromSuggestions, setSelectedFromSuggestions] = useState(false);
-
   // Fetch diseases from API on component mount
   useEffect(() => {
     const savedChats = JSON.parse(localStorage.getItem("drugChats") || "[]");
@@ -58,6 +70,7 @@ export const SearchPage = () => {
     if (currentChat) {
       setQuery(currentChat.query);
       setResults(currentChat.results);
+      setKnowledgeBase(currentChat.knowledge_base || null);
       applyFilters(currentChat.results); // Apply filters to the restored results
     }
   }, [currentChat]);
@@ -148,16 +161,25 @@ export const SearchPage = () => {
     setShowSuggestions(false);
     setSelectedFromSuggestions(true);
 
-    // Call searchDrugs directly with the selected disease name
     setLoading(true);
     setError(null);
 
-    // Call searchDrugs directly with the selected disease name
     searchDrugs(suggestion.name, filters)
-      .then((result) => {
+      .then(async (result) => {
         const formattedResults = Array.isArray(result) ? result : [result];
         setResults(formattedResults);
         applyFilters(formattedResults);
+
+        // Check if knowledge base data is available in the response
+        if (result.knowledge_base) {
+          setKnowledgeBase(result.knowledge_base);
+        } else if (filters.applyQualitative) {
+          // Try to fetch knowledge base separately if qualitative analysis was enabled
+          const kb = await getKnowledgeBase(suggestion.name);
+          setKnowledgeBase(kb);
+        } else {
+          setKnowledgeBase(null);
+        }
 
         // Create new chat with all detailed scores included
         const newChat = {
@@ -173,6 +195,7 @@ export const SearchPage = () => {
             formattedResults.length > 0
               ? formattedResults[0].method_scores
               : null,
+          knowledge_base: result.knowledge_base || null,
         };
 
         setCurrentChat(newChat);
@@ -210,35 +233,123 @@ export const SearchPage = () => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!query.trim()) return;
 
     setLoading(true);
     setError(null);
+    setResults([]);
+    setKnowledgeBase(null); // Reset knowledge base when starting a new search
 
     try {
-      const result = await searchDrugs(query, filters);
-      const formattedResults = Array.isArray(result) ? result : [result];
-      setResults(formattedResults);
-      applyFilters(formattedResults);
+      // Fetch disease repurposing results
+      const response = await fetch(
+        `${apiBaseUrl}/api/disease/analyze?disease=${encodeURIComponent(query)}`
+      );
 
-      // Create new chat
-      const newChat = {
-        query,
-        results: formattedResults,
-        timestamp: new Date().toISOString(),
-      };
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Error analyzing disease");
+      }
 
-      setCurrentChat(newChat);
+      const data = await response.json();
 
-      // Update chat history
-      const updatedChats = [newChat, ...chats].slice(0, 10);
-      setChats(updatedChats);
-      localStorage.setItem("drugChats", JSON.stringify(updatedChats));
-    } catch (error) {
-      setError(error.message || "Failed to fetch results. Please try again.");
+      // Process results
+      setResults(data.top_candidates || []);
+
+      // Log the entire response to inspect structure
+      console.log("API Response:", data);
+
+      // Look for knowledge base in the response by checking all possible field names
+      if (data.knowledge_base) {
+        console.log("Found knowledge_base in response", data.knowledge_base);
+        setKnowledgeBase(data.knowledge_base);
+      } else if (data.disease_knowledge) {
+        console.log(
+          "Found disease_knowledge in response",
+          data.disease_knowledge
+        );
+        setKnowledgeBase(data.disease_knowledge);
+      } else {
+        console.log(
+          "Knowledge base not found in response, trying to fetch separately"
+        );
+        // If knowledge base isn't in the response, try to fetch it separately
+        fetchKnowledgeBase(query);
+      }
+    } catch (err) {
+      console.error("Error in handleSubmit:", err);
+      if (err.message.includes("Disease not found")) {
+        // Try to find similar diseases
+        try {
+          const suggestionsResponse = await fetch(
+            `${apiBaseUrl}/api/disease/suggest?query=${encodeURIComponent(
+              query
+            )}`
+          );
+          if (suggestionsResponse.ok) {
+            const suggestionsData = await suggestionsResponse.json();
+            setError({
+              message: `Disease "${query}" not found in our database.`,
+              suggestions: suggestionsData.suggestions || [],
+              userMessage: "Did you mean one of these diseases?",
+            });
+          } else {
+            setError(err);
+          }
+        } catch (suggestionsErr) {
+          setError(err);
+        }
+      } else {
+        setError(err);
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fix the fetchKnowledgeBase function to log more information
+  const fetchKnowledgeBase = async (diseaseName) => {
+    try {
+      console.log("Fetching knowledge base for", diseaseName);
+      const response = await fetch(
+        `${apiBaseUrl}/api/disease/knowledge-base?disease=${encodeURIComponent(
+          diseaseName
+        )}`
+      );
+
+      console.log("Knowledge base response status:", response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Knowledge base response data:", data);
+
+        // Check for both field names
+        if (data.knowledge_base) {
+          console.log("Setting knowledge_base from dedicated endpoint");
+          setKnowledgeBase(data.knowledge_base);
+        } else if (data.disease_knowledge) {
+          console.log("Setting disease_knowledge from dedicated endpoint");
+          setKnowledgeBase(data.disease_knowledge);
+        } else {
+          // As a fallback, check if the data itself is a knowledge base (has the expected structure)
+          if (
+            data.genes &&
+            (data.biological_processes || data.molecular_functions)
+          ) {
+            console.log("Response appears to be the knowledge base itself");
+            setKnowledgeBase(data);
+          } else {
+            console.log(
+              "No knowledge base found in dedicated endpoint response"
+            );
+          }
+        }
+      } else {
+        console.error("Error fetching knowledge base:", response.statusText);
+      }
+    } catch (err) {
+      console.error("Exception fetching knowledge base:", err);
     }
   };
 
@@ -289,6 +400,48 @@ export const SearchPage = () => {
       )}
     </div>
   );
+
+  // Enhanced Qualitative Analysis Notice
+  const QualitativeAnalysisNotice = () => {
+    const qualitativeCount = results.filter(
+      (r) => r.qualitative_analysis
+    ).length;
+
+    if (qualitativeCount === 0) return null;
+
+    return (
+      <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg text-sm flex items-start">
+        <Sparkles
+          size={18}
+          className="text-purple-600 mr-2 mt-0.5 flex-shrink-0"
+        />
+        <div>
+          <h3 className="font-medium text-purple-800">
+            Qualitative Analysis Applied to {qualitativeCount} Drugs
+          </h3>
+          <p className="text-purple-700">
+            Top results have been analyzed using the {query}-specific knowledge
+            base for enhanced biological relevance. This analysis evaluates
+            matches with disease-relevant genes, biological processes, and
+            molecular functions.
+          </p>
+          {knowledgeBase && (
+            <button
+              onClick={() =>
+                document
+                  .getElementById("knowledge-base-section")
+                  .scrollIntoView({ behavior: "smooth" })
+              }
+              className="mt-1 text-purple-600 hover:text-purple-800 text-sm font-medium flex items-center"
+            >
+              <FileText size={14} className="mr-1" />
+              View Knowledge Base
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex relative min-h-screen bg-gray-50">
@@ -362,12 +515,7 @@ export const SearchPage = () => {
 
           {/* Search Form */}
           <div className="bg-white rounded-xl shadow-md p-6 mb-8">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault(); // Prevent normal form submission
-                // Only the handleSelectSuggestion will trigger submission
-              }}
-            >
+            <form onSubmit={handleSubmit}>
               <div className="relative mb-4">
                 <p className="text-base font-bold text-gray-700 mb-3">
                   Type to search for a disease, then select from available
@@ -504,7 +652,42 @@ export const SearchPage = () => {
                       </div>
                     </div>
 
-                    {/* New drug type filters */}
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Advanced Analysis Options
+                      </label>
+                      <div className="grid grid-cols-1 gap-2">
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="apply-qualitative"
+                            checked={filters.applyQualitative}
+                            onChange={() =>
+                              handleFilterChange(
+                                "applyQualitative",
+                                !filters.applyQualitative
+                              )
+                            }
+                            className="h-4 w-4 text-purple-600 rounded"
+                          />
+                          <label
+                            htmlFor="apply-qualitative"
+                            className="ml-2 text-sm text-gray-700 flex items-center"
+                          >
+                            <span className="text-purple-600 mr-1">✨</span>
+                            Apply Qualitative Analysis
+                            <span className="ml-1 bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded-full">
+                              New
+                            </span>
+                          </label>
+                        </div>
+                        <p className="text-xs text-gray-500 ml-6">
+                          Enhanced scoring using disease-specific knowledge
+                          bases (currently available for Cystic Fibrosis)
+                        </p>
+                      </div>
+                    </div>
+
                     <div className="mt-4">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Drug Types
@@ -590,6 +773,16 @@ export const SearchPage = () => {
             </form>
           </div>
 
+          {/* Display knowledge base if available */}
+          {knowledgeBase && query && (
+            <div id="knowledge-base-section">
+              <KnowledgeBaseDisplay
+                knowledgeBase={knowledgeBase}
+                disease={query}
+              />
+            </div>
+          )}
+
           {/* Results Section */}
           <div>
             {loading && (
@@ -667,6 +860,9 @@ export const SearchPage = () => {
                     </span>
                   </div>
                 </div>
+
+                {/* Qualitative Analysis Notice - enhanced version */}
+                <QualitativeAnalysisNotice />
 
                 <div className="space-y-4">
                   {filteredResults.map((result, index) => (

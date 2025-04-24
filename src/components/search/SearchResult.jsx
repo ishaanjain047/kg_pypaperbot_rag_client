@@ -14,8 +14,10 @@ import {
   FileText,
   Check,
   AlertCircle,
+  Sparkles,
 } from "lucide-react";
 import ScoreBreakdown from "./ScoreCard";
+import QualitativeScoreBreakdown from "./QualitativeScoreBreakdown";
 
 // Create a new Indication Badge component
 const IndicationBadge = ({ isIndication }) => {
@@ -412,6 +414,64 @@ export const SearchResult = ({ result }) => {
       result.related_diseases?.length > 0,
     ].filter(Boolean).length;
 
+    // Enhanced score display to include qualitative analysis scores
+    const ScoreDisplay = () => {
+      const score = result.combined_score || result.score || 0;
+      const hasQualitativeScores =
+        result.qualitative_analysis &&
+        (result.qualitative_analysis.gene_quality_score > 0 ||
+          result.qualitative_analysis.biological_process_quality_score > 0 ||
+          result.qualitative_analysis.molecular_function_quality_score > 0);
+
+      // Calculate impact of qualitative analysis if available
+      let scoreImpact = null;
+      if (
+        hasQualitativeScores &&
+        typeof result.original_score !== "undefined"
+      ) {
+        const originalScore = result.original_score;
+        const percentChange = ((score - originalScore) / originalScore) * 100;
+
+        if (Math.abs(percentChange) >= 1) {
+          scoreImpact = {
+            change: percentChange,
+            isPositive: percentChange > 0,
+          };
+        }
+      }
+
+      return (
+        <div className="flex flex-col items-center bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <div className="text-4xl font-bold text-blue-600 mb-1">
+            {score.toFixed(1)}
+          </div>
+          <div className="text-sm text-gray-500 mb-1">Combined Score</div>
+
+          {hasQualitativeScores && (
+            <div className="flex flex-col items-center mt-1">
+              <div className="flex items-center">
+                <Sparkles size={12} className="text-purple-500 mr-1" />
+                <span className="text-xs text-purple-600 font-medium">
+                  Qualitative Analysis
+                </span>
+              </div>
+
+              {scoreImpact && (
+                <div
+                  className={`text-xs font-medium mt-1 ${
+                    scoreImpact.isPositive ? "text-green-600" : "text-red-600"
+                  }`}
+                >
+                  {scoreImpact.isPositive ? "+" : ""}
+                  {scoreImpact.change.toFixed(1)}% score impact
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    };
+
     return (
       <div
         className={`bg-white rounded-lg shadow-sm border ${
@@ -438,9 +498,17 @@ export const SearchResult = ({ result }) => {
               ) : null}
             </div>
 
-            {/* Display indication status */}
-            <div className="mb-4">
+            {/* Display indication status and qualitative analysis badge */}
+            <div className="mb-4 flex flex-wrap gap-2">
               <IndicationBadge isIndication={isIndication} />
+
+              {/* Add Qualitative Analysis Badge if available */}
+              {result.qualitative_analysis && (
+                <div className="rounded-full px-3 py-1 font-medium text-sm flex items-center bg-purple-100 text-purple-800">
+                  <Sparkles size={14} className="mr-1" />
+                  Qualitative Analysis
+                </div>
+              )}
             </div>
 
             {/* Evidence types with optional TXGNN score badge */}
@@ -569,7 +637,12 @@ export const SearchResult = ({ result }) => {
 
             {expanded && (
               <div className="mt-6 space-y-4">
+                <ScoreDisplay />
                 <ScoreBreakdown result={result} />
+                {/* Add Qualitative Analysis Breakdown component */}
+                {result.qualitative_analysis && (
+                  <QualitativeScoreBreakdown result={result} />
+                )}
                 <AnalysisSection
                   title={
                     isIndication

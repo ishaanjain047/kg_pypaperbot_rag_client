@@ -43,7 +43,8 @@ export const searchDrugs = async (query, filters = {}) => {
         analysis_types: filters.analysisTypes || undefined,
         use_txgnn: filters.analysisTypes?.txgnn !== false, // Use TXGNN unless explicitly disabled
         txgnn_weight: filters.txgnnWeight || 0.4, // Default TXGNN weight
-        include_indications: true  // Always include indication drugs
+        include_indications: true, // Always include indication drugs
+        apply_qualitative: filters.applyQualitative !== false, // Apply qualitative analysis unless explicitly disabled
       }),
     });
 
@@ -151,7 +152,7 @@ export const searchDrugs = async (query, filters = {}) => {
         score: score,
         txgnn_score: txgnnScore,
         gpt_score: gptScore,
-        is_indication: isIndication,  // Add indication flag
+        is_indication: isIndication, // Add indication flag
         evidence_types: Array.isArray(candidate.evidence_types)
           ? candidate.evidence_types
           : [],
@@ -161,6 +162,7 @@ export const searchDrugs = async (query, filters = {}) => {
         ensemble_factor: candidate.ensemble_factor,
         consistency_factor: candidate.consistency_factor,
         original_score: candidate.original_score,
+        qualitative_analysis: candidate.qualitative_analysis, // Include qualitative analysis data
         metrics: candidate.metrics || {},
         found_in_methods: candidate.found_in_methods || [],
 
@@ -213,33 +215,53 @@ export const searchDrugs = async (query, filters = {}) => {
             : [],
         summary:
           candidate.summary ||
-          `${candidate.drug || "This drug"} is a ${isIndication ? "current indication" : "repurposing candidate"} for ${
+          `${candidate.drug || "This drug"} is a ${
+            isIndication ? "current indication" : "repurposing candidate"
+          } for ${
             data.disease || query
           } with a confidence score of ${score.toFixed(1)}.`,
         analysis: {
           drug_repurposing_recommendation:
             candidate.recommendation ||
-            `${
-              candidate.drug || "This drug"
-            } is ${isIndication ? "a current approved indication" : "recommended as a potential repurposing candidate"} for ${
+            `${candidate.drug || "This drug"} is ${
+              isIndication
+                ? "a current approved indication"
+                : "recommended as a potential repurposing candidate"
+            } for ${
               data.disease || query
             } with a confidence score of ${score.toFixed(1)} out of 100.
             
-  ${isIndication ? "This drug is already approved for this indication." : `This score represents the combined evidence from multiple computational analyses including gene associations, phenotype matching, pathway analysis${
-    txgnnScore > 0 ? ", and TXGNN modeling" : ""
-  }.`}`,
+  ${
+    isIndication
+      ? "This drug is already approved for this indication."
+      : `This score represents the combined evidence from multiple computational analyses including gene associations, phenotype matching, pathway analysis${
+          txgnnScore > 0 ? ", and TXGNN modeling" : ""
+        }.`
+  }`,
 
           biological_evidence:
             candidate.biological_evidence ||
-            `${isIndication ? "As an approved indication, this drug has established biological evidence for efficacy." : "This recommendation is based on evidence from multiple analyses."}`,
+            `${
+              isIndication
+                ? "As an approved indication, this drug has established biological evidence for efficacy."
+                : "This recommendation is based on evidence from multiple analyses."
+            }`,
 
           mechanism_analysis:
             candidate.mechanism ||
-            `${isIndication ? "As a current indication, the mechanism of action for this drug is already established." : "The repurposing potential needs to be validated through experimental studies."}`,
+            `${
+              isIndication
+                ? "As a current indication, the mechanism of action for this drug is already established."
+                : "The repurposing potential needs to be validated through experimental studies."
+            }`,
 
           scientific_support:
             candidate.references ||
-            `${isIndication ? "This drug is already approved and used clinically for this disease." : "This recommendation is based on computational analysis and would require further validation."}`,
+            `${
+              isIndication
+                ? "This drug is already approved and used clinically for this disease."
+                : "This recommendation is based on computational analysis and would require further validation."
+            }`,
         },
       };
     });
@@ -450,5 +472,36 @@ export const checkServerHealth = async () => {
   } catch (err) {
     console.error("Health check failed:", err);
     return false;
+  }
+};
+
+// Add a function to fetch the knowledge base for a disease
+export const getKnowledgeBase = async (diseaseName) => {
+  try {
+    const encodedDisease = encodeURIComponent(diseaseName);
+    const response = await fetch(
+      `${API_BASE_URL}/api/knowledge-base/${encodedDisease}`,
+      {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+        credentials: "include",
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        // Knowledge base not found
+        return null;
+      }
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.knowledge_base;
+  } catch (error) {
+    console.error("Error fetching knowledge base:", error);
+    return null;
   }
 };
