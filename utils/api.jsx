@@ -42,7 +42,7 @@ export const searchDrugs = async (query, filters = {}) => {
         min_score: filters.minScore || 0,
         analysis_types: filters.analysisTypes || undefined,
         use_txgnn: filters.analysisTypes?.txgnn !== false, // Use TXGNN unless explicitly disabled
-        txgnn_weight: filters.txgnnWeight || 0.4, // Default TXGNN weight
+        use_gpt: filters.analysisTypes?.gpt !== false, // Use GPT unless explicitly disabled
         include_indications: true, // Always include indication drugs
         apply_qualitative: filters.applyQualitative !== false, // Apply qualitative analysis unless explicitly disabled
       }),

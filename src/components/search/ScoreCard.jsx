@@ -157,21 +157,22 @@ const ScoreBreakdown = ({ result }) => {
     methodScores: JSON.stringify(methodScores),
   });
 
-  // Calculate weights for diagram - extract from weights_used if available
-  const weights = result.weights_used || {};
+  // Get weights from the API response or use default values matching server's config
+  const serverWeights = result.weights_used || {};
 
-  // Default weights if not available in result
+  // Use the weights from the API response if available, otherwise use default values matching server config
+  const txgnnWeight =
+    result.txgnn_score > 0
+      ? serverWeights.txgnn || result.txgnn_weight || 0.4
+      : 0;
+  const gptWeight =
+    result.gpt_score > 0 ? serverWeights.gpt || result.gpt_weight || 0.35 : 0;
+
+  // Calculate the remaining weight for knowledge graph methods
   const kgWeight =
-    txgnnScore > 0 && gptScore > 0
-      ? 0.4
-      : txgnnScore > 0
-      ? 0.6
-      : gptScore > 0
-      ? 0.8
+    result.txgnn_score > 0 || result.gpt_score > 0
+      ? Math.max(0, 1.0 - txgnnWeight - gptWeight)
       : 1.0;
-
-  const txgnnWeight = txgnnScore > 0 ? 0.4 : 0; // 40% weight for TXGNN if present
-  const gptWeight = gptScore > 0 ? 0.2 : 0; // 20% weight for GPT if present
 
   // Calculate weighted contributions to final score
   const kgContribution = kgMethodsScore * kgWeight;
@@ -182,7 +183,7 @@ const ScoreBreakdown = ({ result }) => {
     kgContribution,
     txgnnContribution,
     gptContribution,
-    weights: JSON.stringify(weights),
+    weights: JSON.stringify(serverWeights),
   });
 
   // Create data for the component breakdown chart - original scores

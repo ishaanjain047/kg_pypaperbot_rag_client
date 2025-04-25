@@ -65,11 +65,15 @@ const QualitativeScoreBreakdown = ({ result }) => {
   }
 
   const qualitativeData = result.qualitative_analysis;
+
+  // Use weights from the server response, with sensible defaults that match server config if not provided
   const weights = qualitativeData.weights_used || {
-    quantitative: 0.5,
-    gene: 0.25,
-    biological_process: 0.15,
-    molecular_function: 0.1,
+    // These defaults should match the server's Config values
+    quantitative: 0.5, // QUALITATIVE_WEIGHT_QUANTITATIVE in server config
+    gene: 0.25, // QUALITATIVE_WEIGHT_GENE in server config
+    biological_process: 0.1, // QUALITATIVE_WEIGHT_BP in server config
+    molecular_function: 0.075, // QUALITATIVE_WEIGHT_MF in server config
+    cellular_component: 0.075, // QUALITATIVE_WEIGHT_CC in server config
   };
 
   // Multiply scores by 100 to display as percentages

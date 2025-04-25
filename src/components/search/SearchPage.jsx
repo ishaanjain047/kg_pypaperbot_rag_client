@@ -44,7 +44,6 @@ export const SearchPage = () => {
   const [filters, setFilters] = useState({
     minScore: 0,
     maxCandidates: 10,
-    txgnnWeight: 0.4, // Default TXGNN weight is 0.4
     showIndications: true, // New filter to show/hide indication drugs
     showRepurposing: true, // New filter to show/hide repurposing candidates
     applyQualitative: true, // New filter to enable/disable qualitative analysis
@@ -56,7 +55,8 @@ export const SearchPage = () => {
       phenotype_gene: true,
       molecular_function: true,
       biological_process: true,
-      txgnn: true, // New TXGNN analysis type
+      txgnn: true, // TXGNN analysis toggle
+      gpt: true, // GPT analysis toggle
     },
   });
 
@@ -156,6 +156,69 @@ export const SearchPage = () => {
     }
   };
 
+  // Add a helper function to manage local storage and prevent quota issues
+  const saveDrugChatsToStorage = (chatsToSave) => {
+    try {
+      // Keep only essential data to reduce storage size
+      const compactChats = chatsToSave.map((chat) => ({
+        query: chat.query,
+        timestamp: chat.timestamp,
+        // For results, only keep essential fields and limit the number of drugs
+        results: (chat.results || []).slice(0, 50).map((drug) => ({
+          drug: drug.drug,
+          combined_score: drug.combined_score || drug.score || 0,
+          is_indication: drug.is_indication || false,
+        })),
+        // Don't store the full knowledge base, only basic info if needed
+        knowledge_base: chat.knowledge_base
+          ? {
+              disease: chat.knowledge_base.disease,
+              gene_count: chat.knowledge_base.genes
+                ? chat.knowledge_base.genes.length
+                : 0,
+            }
+          : null,
+      }));
+
+      // Limit to 5 chats to reduce storage usage
+      const limitedChats = compactChats.slice(0, 5);
+
+      // Convert to string and check size
+      const chatString = JSON.stringify(limitedChats);
+
+      // If string is too large (over 4MB), reduce further
+      if (chatString.length > 4000000) {
+        console.warn("Chat history too large, reducing further");
+        const furtherLimitedChats = limitedChats.slice(0, 3);
+        localStorage.setItem("drugChats", JSON.stringify(furtherLimitedChats));
+        return furtherLimitedChats;
+      }
+
+      localStorage.setItem("drugChats", chatString);
+      return limitedChats;
+    } catch (error) {
+      console.error("Error saving chats to localStorage:", error);
+      // If quota exceeded or other error, clear and save only current
+      try {
+        localStorage.removeItem("drugChats");
+        if (chatsToSave.length > 0) {
+          const singleChat = [
+            {
+              query: chatsToSave[0].query,
+              timestamp: chatsToSave[0].timestamp,
+              results: [],
+            },
+          ];
+          localStorage.setItem("drugChats", JSON.stringify(singleChat));
+          return singleChat;
+        }
+      } catch (fallbackError) {
+        console.error("Failed to save even after clearing:", fallbackError);
+      }
+      return [];
+    }
+  };
+
   const handleSelectSuggestion = (suggestion) => {
     setQuery(suggestion.name);
     setShowSuggestions(false);
@@ -200,10 +263,10 @@ export const SearchPage = () => {
 
         setCurrentChat(newChat);
 
-        // Update chat history
+        // Update chat history with our new storage management function
         const updatedChats = [newChat, ...chats].slice(0, 10);
-        setChats(updatedChats);
-        localStorage.setItem("drugChats", JSON.stringify(updatedChats));
+        const savedChats = saveDrugChatsToStorage(updatedChats);
+        setChats(savedChats);
       })
       .catch((err) => {
         setError(err.message || "Failed to fetch results. Please try again.");
@@ -219,9 +282,10 @@ export const SearchPage = () => {
       const updatedChats = [
         currentChat,
         ...chats.filter((chat) => chat.timestamp !== currentChat.timestamp),
-      ].slice(0, 10); // Keep last 10 chats
-      setChats(updatedChats);
-      localStorage.setItem("drugChats", JSON.stringify(updatedChats));
+      ].slice(0, 10);
+
+      const savedChats = saveDrugChatsToStorage(updatedChats);
+      setChats(savedChats);
     }
 
     // Reset current state
