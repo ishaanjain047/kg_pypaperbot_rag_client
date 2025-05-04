@@ -6,6 +6,7 @@ import { SearchPage } from "./components/search/SearchPage";
 import { SidebarProvider } from "./context/SidebarContext";
 import ResearchAssistant from "./components/query/queryPage";
 import UltraSimplifiedResearchAssistant from "./components/query/s_queryPage";
+import { VariantSearchPage } from "./components/variant/VariantSearchPage";
 
 const App = () => {
   return (
@@ -19,6 +20,7 @@ const App = () => {
               path="/query"
               element={<UltraSimplifiedResearchAssistant />}
             />
+            <Route path="/variant-search" element={<VariantSearchPage />} />
           </Routes>
         </Layout>
       </SidebarProvider>

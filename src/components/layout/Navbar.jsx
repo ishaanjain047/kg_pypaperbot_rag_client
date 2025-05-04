@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Home, Search, Menu } from "lucide-react";
+import { Home, Search, Menu, Dna } from "lucide-react";
 
 export const Navbar = ({ toggleSidebar }) => {
   const location = useLocation();
@@ -46,6 +46,14 @@ export const Navbar = ({ toggleSidebar }) => {
             }`}
           >
             <Search size={18} /> General Query
+          </Link>
+          <Link
+            to="/variant-search"
+            className={`hover:text-blue-400 flex items-center gap-2 p-2 ${
+              location.pathname === "/variant-search" ? "text-blue-400" : ""
+            }`}
+          >
+            <Dna size={18} /> Variant Search
           </Link>
         </div>
       </div>
